@@ -15,7 +15,7 @@ scheduleOverdueItemsCheck();
 console.log('Scheduled job for checking overdue items has been set up');
 
 app.use(cors({
-    origin: ['http://localhost:4200', 'http://localhost:50352'],
+    origin: ['http://localhost:4200', 'http://localhost:50352', 'https://scilems.pages.dev'],
     credentials: true
 }));
 
