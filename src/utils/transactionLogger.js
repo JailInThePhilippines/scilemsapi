@@ -1,5 +1,7 @@
 // transactionLogger.js
-const Logbook = require('../models/logBookModel')
+const Transaction = require('../models/transactionModel');
+const Logbook = require('../models/logBookModel');
+const mongoose = require('mongoose');
 
 /**
  * Logger utility for recording transaction status changes
@@ -13,16 +15,17 @@ const transactionLogger = {
    * @param {String} newStatus - The new status being set
    * @returns {Promise<Object>} - The created logbook entry
    */
-  async logStatusChange(transaction, updateData, newStatus) {
+  async logStatusChange(transaction, updateData, newStatus, actionStatus = null) {
     try {
       // Extract relevant data from the transaction
       const logEntry = {
+        transactionID: transaction._id, // Link log to original transaction
         cartID: transaction.cartID,
         borrowedItems: transaction.borrowedItems,
-        currentStatus: newStatus,
+        currentStatus: actionStatus || newStatus,
         lastStatus: transaction.currentStatus,
         dataApplied: transaction.dataApplied,
-        
+
         // Include all date fields that may exist in the transaction
         dateApproved: updateData.$set?.dateApproved || transaction.dateApproved,
         pickUpDate: updateData.$set?.pickUpDate || transaction.pickUpDate,
@@ -30,11 +33,12 @@ const transactionLogger = {
         returnDate: updateData.$set?.returnDate || transaction.returnDate,
         dateReturned: updateData.$set?.dateReturned || transaction.dateReturned,
         dateArchived: updateData.$set?.dateArchived || transaction.dateArchived,
-        
+
         // Include remarks if any
         remarks: updateData.$set?.remarks || transaction.remarks
       };
 
+      // Create logbook entry
       const logbookEntry = await Logbook.create(logEntry);
       return logbookEntry;
     } catch (err) {
@@ -61,7 +65,7 @@ const transactionLogger = {
         })
         .populate('borrowedItems.eqID')
         .sort({ createdAt: 1 });
-      
+
       return history;
     } catch (err) {
       console.error('Error fetching transaction history:', err);

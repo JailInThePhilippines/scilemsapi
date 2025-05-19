@@ -19,12 +19,10 @@ exports.addToCart = async (req, res) => {
             return res.status(404).json({ message: 'Equipment not found' });
         }
 
+        // Optional: Inform user if they’re adding more than current stock
         if (equipment.stock < quantity) {
-            return res.status(400).json({ message: 'Not enough stock available' });
+            return res.status(400).json({ message: 'Requested quantity exceeds available stock' });
         }
-
-        equipment.stock -= quantity;
-        await equipment.save();
 
         let cart = await Cart.findOne({ brID: userId });
 
@@ -34,6 +32,7 @@ exports.addToCart = async (req, res) => {
                 items: [{
                     eqID,
                     quantity,
+                    dateOrdered: new Date()
                 }]
             });
         } else {
@@ -43,7 +42,7 @@ exports.addToCart = async (req, res) => {
                 existingItem.quantity += quantity;
                 existingItem.dateOrdered = new Date();
             } else {
-                cart.items.push({ eqID, quantity });
+                cart.items.push({ eqID, quantity, dateOrdered: new Date() });
             }
         }
 
@@ -55,6 +54,7 @@ exports.addToCart = async (req, res) => {
         res.status(500).json({ message: 'Server Error' });
     }
 };
+
 
 exports.getCart = async (req, res) => {
     try {

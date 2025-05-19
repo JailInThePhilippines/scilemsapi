@@ -9,7 +9,7 @@ const logBookSchema = new mongoose.Schema({
   }],
   currentStatus: {
     type: String,
-    enum: ['applying', 'approved', 'borrowed', 'returned', 'archive', 'declined', 'deleted', 'pending'],
+    enum: ['applying', 'approved', 'borrowed', 'returned', 'archive', 'declined', 'deleted', 'pending', 'restored'],
     required: true
   },
   dataApplied: { type: Date },
@@ -20,7 +20,8 @@ const logBookSchema = new mongoose.Schema({
   dateReturned: { type: Date },
   dateArchived: { type: Date },
   lastStatus: { type: String },
-  remarks: { type: String }
+  remarks: { type: String },
+  transactionID: { type: mongoose.Schema.Types.ObjectId, ref: 'Transaction', required: true },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Logbook', logBookSchema);

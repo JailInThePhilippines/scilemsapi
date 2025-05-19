@@ -73,7 +73,7 @@ exports.getAdminDetails = async (req, res) => {
 exports.updateUserDetails = async (req, res) => {
     try {
         const { id } = req.params;
-        const { firstname, middlename, lastname } = req.body;
+        const { firstname, middlename, lastname, role } = req.body;
 
         if (!firstname || !lastname) {
             return res.status(400).json({ message: 'Firstname and lastname are required.' });
@@ -85,6 +85,7 @@ exports.updateUserDetails = async (req, res) => {
                 firstname,
                 middlename,
                 lastname,
+                role,
                 updatedAt: Date.now()
             },
             { new: true, runValidators: true }
@@ -192,9 +193,11 @@ exports.getAllApprovedTransactions = async (req, res) => {
 
 exports.confirmApplication = async (req, res) => {
     try {
+        console.log('Starting confirmApplication with transaction ID:', req.params.transactionId);
         const { transactionId } = req.params;
         const { pickUpDate } = req.body;
 
+        console.log('Finding transaction...');
         const transaction = await Transaction.findById(transactionId).populate({
             path: 'cartID',
             populate: {
@@ -204,8 +207,60 @@ exports.confirmApplication = async (req, res) => {
         });
 
         if (!transaction) {
+            console.log('Transaction not found');
             return res.status(404).json({ message: 'Transaction not found' });
         }
+
+        console.log('Transaction found:', transaction._id);
+
+        // Check if borrowedItems array exists in the transaction
+        if (!transaction.borrowedItems || !Array.isArray(transaction.borrowedItems) || transaction.borrowedItems.length === 0) {
+            console.log('No borrowed items found in transaction');
+            return res.status(400).json({ message: 'No borrowed items found in transaction' });
+        }
+
+        console.log('Processing', transaction.borrowedItems.length, 'borrowed items');
+
+        // Decrease stock for each item in borrowedItems
+        for (let i = 0; i < transaction.borrowedItems.length; i++) {
+            const item = transaction.borrowedItems[i];
+            console.log(`Processing item ${i + 1}/${transaction.borrowedItems.length}:`, JSON.stringify(item));
+
+            if (!item.eqID) {
+                console.log(`Item ${i} has no eqID`);
+                continue;
+            }
+
+            const eqId = item.eqID._id || item.eqID;
+            console.log(`Finding equipment with ID: ${eqId}`);
+
+            const equipment = await Equipment.findById(eqId);
+
+            if (!equipment) {
+                console.log(`Equipment with ID ${eqId} not found`);
+                return res.status(404).json({ message: `Equipment with ID ${eqId} not found.` });
+            }
+
+            console.log(`Found equipment: ${equipment.name}, current stock: ${equipment.stock}`);
+
+            if (equipment.stock < item.quantity) {
+                console.log(`Not enough stock for ${equipment.name}. Needed: ${item.quantity}, Available: ${equipment.stock}`);
+                return res.status(400).json({ message: `Not enough stock for ${equipment.name}.` });
+            }
+
+            console.log(`Decreasing stock for ${equipment.name} from ${equipment.stock} to ${equipment.stock - item.quantity}`);
+            equipment.stock -= item.quantity;
+
+            try {
+                await equipment.save();
+                console.log(`Stock updated successfully for ${equipment.name}. New stock: ${equipment.stock}`);
+            } catch (error) {
+                console.error(`Error saving equipment ${equipment._id}:`, error);
+                return res.status(500).json({ message: `Error updating stock for ${equipment.name}` });
+            }
+        }
+
+        console.log('All items processed successfully');
 
         const updateData = {
             $set: {
@@ -215,8 +270,10 @@ exports.confirmApplication = async (req, res) => {
             }
         };
 
+        console.log('Logging status change...');
         await transactionLogger.logStatusChange(transaction, updateData, 'approved');
 
+        console.log('Updating transaction status...');
         const updatedTransaction = await Transaction.findByIdAndUpdate(
             transactionId,
             updateData,
@@ -231,23 +288,25 @@ exports.confirmApplication = async (req, res) => {
 
         const userId = updatedTransaction.cartID.brID;
 
+        console.log('Creating notification for user:', userId);
         await notificationService.createUserNotification(
             userId,
             {
                 title: 'Borrow Request Approved',
-                description: `Your borrow request for a ${updatedTransaction.equipmentDetails?.name || 'equipment'} has been approved.`,
+                description: `Your borrow request for equipment has been approved.`,
                 resourceType: 'transaction',
                 resourceId: updatedTransaction._id
             }
         );
 
+        console.log('Confirmation complete');
         res.status(200).json({
             message: 'Application confirmed successfully',
             transaction: updatedTransaction
         });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error' });
+        console.error('Error in confirmApplication:', err);
+        res.status(500).json({ message: 'Server error', error: err.message });
     }
 };
 
@@ -696,7 +755,7 @@ exports.restoreArchivedRecord = async (req, res) => {
             $unset: { dateArchived: "" }
         };
 
-        await transactionLogger.logStatusChange(transaction, updateData, transaction.lastStatus);
+        await transactionLogger.logStatusChange(transaction, updateData, transaction.lastStatus, 'restored');
 
         transaction.currentStatus = transaction.lastStatus;
         transaction.lastStatus = transaction.currentStatus;

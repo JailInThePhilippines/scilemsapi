@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const {
   addCategory,
+  editCategory,
+  deleteCategory,
   addEquipment,
   getCategories,
   getEquipments,
@@ -19,6 +21,7 @@ router.get('/categories/open', getCategories);
 router.get('/equipments/open', getEquipments);
 
 router.post('/category/add', authMiddleware, validationRules.category, addCategory);
+
 router.post(
   '/equipment/add',
   authMiddleware,
@@ -35,6 +38,10 @@ router.put(
   editEquipment
 );
 
+router.put('/category/edit/:id', authMiddleware, validationRules.category, editCategory);
+
 router.delete('/equipment/delete/:id', authMiddleware, deleteEquipment);
+
+router.delete('/category/delete/:id', authMiddleware, deleteCategory);
 
 module.exports = router;

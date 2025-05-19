@@ -9,7 +9,7 @@ const TransactionSchema = new mongoose.Schema({
   }],
   currentStatus: {
     type: String,
-    enum: ['applying', 'approved', 'borrowed', 'returned', 'archive', 'declined', 'deleted', 'pending'],
+    enum: ['applying', 'approved', 'borrowed', 'returned', 'archive', 'declined', 'deleted', 'pending', 'restored'],
     required: true
   },
   dataApplied: { type: Date },

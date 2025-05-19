@@ -38,6 +38,59 @@ exports.addCategory = async (req, res) => {
     }
 };
 
+exports.editCategory = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { id } = req.params;
+    const { name } = req.body;
+
+    try {
+        const category = await Category.findById(id);
+        if (!category) {
+            return res.status(404).json({ error: 'Category not found' });
+        }
+
+        const existingCategory = await Category.findOne({ name });
+        if (existingCategory && existingCategory._id.toString() !== id) {
+            return res.status(400).json({ error: 'Another category with this name already exists' });
+        }
+
+        category.name = name;
+        await category.save();
+
+        return res.status(200).json({
+            message: 'Category updated successfully',
+            category
+        });
+    } catch (err) {
+        console.error('Error editing category:', err);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+exports.deleteCategory = async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const category = await Category.findById(id);
+        if (!category) {
+            return res.status(404).json({ error: 'Category not found' });
+        }
+
+        await Category.deleteOne({ _id: id });
+
+        return res.status(200).json({
+            message: 'Category deleted successfully'
+        });
+    } catch (err) {
+        console.error('Error deleting category:', err);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
 exports.addEquipment = async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
