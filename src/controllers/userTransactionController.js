@@ -88,7 +88,7 @@ exports.deleteItemInCart = async (req, res) => {
         for (const eqID of eqIDs) {
             const item = cart.items.find(i => i.eqID.toString() === eqID);
             if (item) {
-                await Equipment.findByIdAndUpdate(eqID, { $inc: { stock: item.quantity } });
+                // Do NOT restock equipment here
                 cart.items = cart.items.filter(i => i.eqID.toString() !== eqID);
                 restoredCount++;
             }
