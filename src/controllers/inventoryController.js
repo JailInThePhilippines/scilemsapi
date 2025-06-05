@@ -4,6 +4,15 @@ const { validationResult } = require('express-validator');
 const { uploadToCloudinary } = require('../middlewares/uploadMiddleware');
 const notificationService = require('../utils/notificationService');
 
+const ensureNoCategoryExists = async () => {
+    let noCategory = await Category.findOne({ name: 'No Category' });
+    if (!noCategory) {
+        noCategory = new Category({ name: 'No Category' });
+        await noCategory.save();
+    }
+    return noCategory;
+};
+
 exports.addCategory = async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -53,6 +62,10 @@ exports.editCategory = async (req, res) => {
             return res.status(404).json({ error: 'Category not found' });
         }
 
+        if (category.name === 'No Category') {
+            return res.status(400).json({ error: 'Cannot edit the default "No Category" category' });
+        }
+
         const existingCategory = await Category.findOne({ name });
         if (existingCategory && existingCategory._id.toString() !== id) {
             return res.status(400).json({ error: 'Another category with this name already exists' });
@@ -80,10 +93,29 @@ exports.deleteCategory = async (req, res) => {
             return res.status(404).json({ error: 'Category not found' });
         }
 
+        if (category.name === 'No Category') {
+            return res.status(400).json({ error: 'Cannot delete the default "No Category" category' });
+        }
+
+        const noCategory = await ensureNoCategoryExists();
+
+        const equipmentCount = await Equipment.countDocuments({ catID: id });
+        if (equipmentCount > 0) {
+            await Equipment.updateMany(
+                { catID: id },
+                { catID: noCategory._id }
+            );
+        }
+
         await Category.deleteOne({ _id: id });
 
+        const message = equipmentCount > 0 
+            ? `Category deleted successfully. ${equipmentCount} equipment(s) moved to "No Category".`
+            : 'Category deleted successfully';
+
         return res.status(200).json({
-            message: 'Category deleted successfully'
+            message,
+            movedEquipmentCount: equipmentCount
         });
     } catch (err) {
         console.error('Error deleting category:', err);
@@ -100,9 +132,18 @@ exports.addEquipment = async (req, res) => {
     const { catID, name, stock, description, ytLink } = req.body;
 
     try {
-        const category = await Category.findById(catID);
-        if (!category) {
-            return res.status(404).json({ error: 'Category not found' });
+        let categoryId = catID;
+
+        // If no category provided or category doesn't exist, use "No Category"
+        if (!catID) {
+            const noCategory = await ensureNoCategoryExists();
+            categoryId = noCategory._id;
+        } else {
+            const category = await Category.findById(catID);
+            if (!category) {
+                const noCategory = await ensureNoCategoryExists();
+                categoryId = noCategory._id;
+            }
         }
 
         let imageUrl = '';
@@ -117,7 +158,7 @@ exports.addEquipment = async (req, res) => {
         }
 
         const equipment = new Equipment({
-            catID,
+            catID: categoryId,
             name,
             stock: parseInt(stock, 10),
             description,
@@ -146,6 +187,8 @@ exports.addEquipment = async (req, res) => {
 
 exports.getCategories = async (req, res) => {
     try {
+        await ensureNoCategoryExists();
+        
         const categories = await Category.find().sort({ name: 1 });
         return res.status(200).json({ categories });
     } catch (err) {
@@ -200,7 +243,7 @@ exports.editEquipment = async (req, res) => {
     }
 
     const { id } = req.params;
-    const { catID, name, stock, description, ytLink } = req.body;
+    const { catID, name, stock, description, ytLink, removeImage } = req.body;
 
     try {
         const equipment = await Equipment.findById(id);
@@ -208,13 +251,25 @@ exports.editEquipment = async (req, res) => {
             return res.status(404).json({ error: 'Equipment not found' });
         }
 
-        const category = await Category.findById(catID);
-        if (!category) {
-            return res.status(404).json({ error: 'Category not found' });
+        let categoryId = catID;
+
+        if (!catID) {
+            const noCategory = await ensureNoCategoryExists();
+            categoryId = noCategory._id;
+        } else {
+            const category = await Category.findById(catID);
+            if (!category) {
+                const noCategory = await ensureNoCategoryExists();
+                categoryId = noCategory._id;
+            }
         }
 
         let imageUrl = equipment.image;
-        if (req.file) {
+
+        if (removeImage === 'true' || removeImage === true) {
+            imageUrl = null;
+        }
+        else if (req.file) {
             try {
                 const result = await uploadToCloudinary(req.file);
                 imageUrl = result.secure_url;
@@ -224,7 +279,7 @@ exports.editEquipment = async (req, res) => {
             }
         }
 
-        equipment.catID = catID;
+        equipment.catID = categoryId;
         equipment.name = name;
         equipment.stock = parseInt(stock, 10);
         equipment.description = description;
@@ -256,5 +311,15 @@ exports.deleteEquipment = async (req, res) => {
     } catch (err) {
         console.error('Error deleting equipment:', err);
         return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+// Optional lang to, di man need. Can comment out kung gusto mo.
+exports.initializeDefaultCategory = async () => {
+    try {
+        await ensureNoCategoryExists();
+        console.log('Default "No Category" initialized successfully');
+    } catch (error) {
+        console.error('Error initializing default category:', error);
     }
 };

@@ -121,23 +121,23 @@ exports.editQuantity = async (req, res) => {
         const item = cart.items.find(i => i.eqID.toString() === eqID);
         if (!item) return res.status(404).json({ message: 'Item not found in cart' });
 
-        const diff = newQuantity - item.quantity;
-
         const equipment = await Equipment.findById(eqID);
         if (!equipment) return res.status(404).json({ message: 'Equipment not found' });
 
-        if (diff > 0 && equipment.stock < diff) {
-            return res.status(400).json({ message: 'Not enough stock to increase quantity' });
+        if (newQuantity > equipment.stock) {
+            return res.status(400).json({
+                message: `Only ${equipment.stock} items available in stock`
+            });
         }
-
-        equipment.stock -= diff;
-        await equipment.save();
 
         item.quantity = newQuantity;
         item.dateOrdered = new Date();
         await cart.save();
 
-        res.status(200).json({ message: 'Quantity updated successfully', cart });
+        res.status(200).json({
+            message: 'Cart quantity updated successfully',
+            cart
+        });
     } catch (error) {
         console.error('Error editing quantity:', error);
         res.status(500).json({ message: 'Server Error' });

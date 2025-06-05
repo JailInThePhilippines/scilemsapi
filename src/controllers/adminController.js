@@ -9,6 +9,7 @@ const { markOverdueItemsAsPending } = require('../utils/scheduleJobs');
 const notificationService = require('../utils/notificationService');
 const transactionLogger = require('../utils/transactionLogger');
 const Logbook = require('../models/logBookModel');
+const emailService = require('../utils/emailService');
 
 exports.createAdmin = async (req, res) => {
     try {
@@ -213,7 +214,6 @@ exports.confirmApplication = async (req, res) => {
 
         console.log('Transaction found:', transaction._id);
 
-        // Check if borrowedItems array exists in the transaction
         if (!transaction.borrowedItems || !Array.isArray(transaction.borrowedItems) || transaction.borrowedItems.length === 0) {
             console.log('No borrowed items found in transaction');
             return res.status(400).json({ message: 'No borrowed items found in transaction' });
@@ -221,7 +221,6 @@ exports.confirmApplication = async (req, res) => {
 
         console.log('Processing', transaction.borrowedItems.length, 'borrowed items');
 
-        // Decrease stock for each item in borrowedItems
         for (let i = 0; i < transaction.borrowedItems.length; i++) {
             const item = transaction.borrowedItems[i];
             console.log(`Processing item ${i + 1}/${transaction.borrowedItems.length}:`, JSON.stringify(item));
@@ -284,11 +283,12 @@ exports.confirmApplication = async (req, res) => {
                 path: 'brID',
                 model: 'User'
             }
-        });
+        }).populate('borrowedItems.eqID');
 
-        const userId = updatedTransaction.cartID.brID;
+        const user = updatedTransaction.cartID.brID;
+        const userId = user._id || user;
 
-        console.log('Creating notification for user:', userId);
+        console.log('Creating in-app notification for user:', userId);
         await notificationService.createUserNotification(
             userId,
             {
@@ -298,6 +298,27 @@ exports.confirmApplication = async (req, res) => {
                 resourceId: updatedTransaction._id
             }
         );
+
+        try {
+            console.log('Sending email notification...');
+            const userEmail = user.email;
+            const userName = user.name || user.username || 'User';
+
+            if (userEmail) {
+                await emailService.sendBorrowRequestApprovedEmail(
+                    userEmail,
+                    userName,
+                    updatedTransaction._id,
+                    updatedTransaction.borrowedItems,
+                    pickUpDate
+                );
+                console.log('Email notification sent successfully');
+            } else {
+                console.log('User email not found, skipping email notification');
+            }
+        } catch (emailError) {
+            console.error('Failed to send email notification:', emailError);
+        }
 
         console.log('Confirmation complete');
         res.status(200).json({
@@ -337,11 +358,13 @@ exports.declineApplication = async (req, res) => {
             }
         }
 
+        const finalRemarks = remarks || 'No remarks provided';
+
         const updateData = {
             $set: {
                 lastStatus: transaction.currentStatus,
                 currentStatus: 'declined',
-                remarks: remarks || 'No remarks provided',
+                remarks: finalRemarks,
                 dateArchived: new Date()
             }
         };
@@ -350,22 +373,43 @@ exports.declineApplication = async (req, res) => {
 
         transaction.lastStatus = transaction.currentStatus;
         transaction.currentStatus = 'declined';
-        transaction.remarks = remarks || 'No remarks provided';
+        transaction.remarks = finalRemarks;
         transaction.dateArchived = new Date();
 
         await transaction.save();
 
-        const userId = transaction.cartID.brID;
+        const user = transaction.cartID.brID;
+        const userId = user._id || user;
 
         await notificationService.createUserNotification(
             userId,
             {
                 title: 'Borrow Request Declined',
-                description: `Your borrow request has been declined. Remarks: ${transaction.remarks}`,
+                description: `Your borrow request has been declined. Remarks: ${finalRemarks}`,
                 resourceType: 'transaction',
                 resourceId: transaction._id
             }
         );
+
+        try {
+            console.log('Sending decline email notification...');
+            const userEmail = user.email;
+            const userName = user.name || user.username || 'User';
+
+            if (userEmail) {
+                await emailService.sendBorrowRequestRejectedEmail(
+                    userEmail,
+                    userName,
+                    transaction._id,
+                    finalRemarks !== 'No remarks provided' ? finalRemarks : null
+                );
+                console.log('Decline email notification sent successfully');
+            } else {
+                console.log('User email not found, skipping email notification');
+            }
+        } catch (emailError) {
+            console.error('Failed to send decline email notification:', emailError);
+        }
 
         res.status(200).json({
             message: 'Application declined and stock restored successfully',
@@ -421,9 +465,10 @@ exports.confirmBorrowedStatus = async (req, res) => {
                 path: 'brID',
                 model: 'User'
             }
-        });
+        }).populate('borrowedItems.eqID');
 
-        const userId = updatedTransaction.cartID.brID;
+        const user = updatedTransaction.cartID.brID;
+        const userId = user._id || user;
 
         await notificationService.createUserNotification(
             userId,
@@ -434,6 +479,27 @@ exports.confirmBorrowedStatus = async (req, res) => {
                 resourceId: updatedTransaction._id
             }
         );
+
+        try {
+            console.log('Sending borrowed items email notification...');
+            const userEmail = user.email;
+            const userName = user.name || user.username || 'User';
+
+            if (userEmail) {
+                await emailService.sendItemsBorrowedEmail(
+                    userEmail,
+                    userName,
+                    updatedTransaction._id,
+                    updatedTransaction.borrowedItems,
+                    returnDate
+                );
+                console.log('Borrowed items email notification sent successfully');
+            } else {
+                console.log('User email not found, skipping email notification');
+            }
+        } catch (emailError) {
+            console.error('Failed to send borrowed items email notification:', emailError);
+        }
 
         return res.status(200).json({
             message: 'Transaction marked as borrowed.',
@@ -554,16 +620,26 @@ exports.confirmReturn = async (req, res) => {
             return res.status(400).json({ message: 'Date returned and remarks are required.' });
         }
 
-        const transaction = await Transaction.findById(transactionId).populate({
-            path: 'cartID',
-            populate: {
-                path: 'brID',
-                model: 'User'
-            }
-        });
+        const transaction = await Transaction.findById(transactionId)
+            .populate('borrowedItems.eqID')
+            .populate({
+                path: 'cartID',
+                populate: {
+                    path: 'brID',
+                    model: 'User'
+                }
+            });
 
         if (!transaction) {
             return res.status(404).json({ message: 'Transaction not found' });
+        }
+
+        for (const item of transaction.borrowedItems) {
+            const equipment = item.eqID;
+            if (equipment) {
+                equipment.stock += item.quantity;
+                await equipment.save();
+            }
         }
 
         const updateData = {
@@ -602,7 +678,7 @@ exports.confirmReturn = async (req, res) => {
         );
 
         return res.status(200).json({
-            message: 'Transaction marked as returned.',
+            message: 'Transaction marked as returned and stock restored successfully.',
             transaction: updatedTransaction
         });
     } catch (error) {
