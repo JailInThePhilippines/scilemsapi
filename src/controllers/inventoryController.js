@@ -109,7 +109,7 @@ exports.deleteCategory = async (req, res) => {
 
         await Category.deleteOne({ _id: id });
 
-        const message = equipmentCount > 0 
+        const message = equipmentCount > 0
             ? `Category deleted successfully. ${equipmentCount} equipment(s) moved to "No Category".`
             : 'Category deleted successfully';
 
@@ -188,7 +188,7 @@ exports.addEquipment = async (req, res) => {
 exports.getCategories = async (req, res) => {
     try {
         await ensureNoCategoryExists();
-        
+
         const categories = await Category.find().sort({ name: 1 });
         return res.status(200).json({ categories });
     } catch (err) {
@@ -251,17 +251,9 @@ exports.editEquipment = async (req, res) => {
             return res.status(404).json({ error: 'Equipment not found' });
         }
 
-        let categoryId = catID;
-
-        if (!catID) {
-            const noCategory = await ensureNoCategoryExists();
-            categoryId = noCategory._id;
-        } else {
-            const category = await Category.findById(catID);
-            if (!category) {
-                const noCategory = await ensureNoCategoryExists();
-                categoryId = noCategory._id;
-            }
+        const category = await Category.findById(catID);
+        if (!category) {
+            return res.status(404).json({ error: 'Category not found' });
         }
 
         let imageUrl = equipment.image;
@@ -279,7 +271,7 @@ exports.editEquipment = async (req, res) => {
             }
         }
 
-        equipment.catID = categoryId;
+        equipment.catID = catID;
         equipment.name = name;
         equipment.stock = parseInt(stock, 10);
         equipment.description = description;
