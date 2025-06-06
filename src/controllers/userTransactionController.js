@@ -97,7 +97,7 @@ exports.deleteItemInCart = async (req, res) => {
         await cart.save();
 
         res.status(200).json({
-            message: `${restoredCount} item(s) removed and stock restored`,
+            message: `${restoredCount} item(s) removed`,
             cart
         });
     } catch (error) {
