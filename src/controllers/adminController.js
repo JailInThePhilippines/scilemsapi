@@ -350,14 +350,6 @@ exports.declineApplication = async (req, res) => {
             return res.status(404).json({ message: 'Transaction not found' });
         }
 
-        for (const item of transaction.borrowedItems) {
-            const equipment = item.eqID;
-            if (equipment) {
-                equipment.stock += item.quantity;
-                await equipment.save();
-            }
-        }
-
         const finalRemarks = remarks || 'No remarks provided';
 
         const updateData = {
@@ -530,14 +522,6 @@ exports.declineApproval = async (req, res) => {
             return res.status(404).json({ message: 'Transaction not found' });
         }
 
-        for (const item of transaction.borrowedItems) {
-            const equipment = item.eqID;
-            if (equipment) {
-                equipment.stock += item.quantity;
-                await equipment.save();
-            }
-        }
-
         const updateData = {
             $set: {
                 lastStatus: transaction.currentStatus,
@@ -696,14 +680,6 @@ exports.removeBorrowedRecords = async (req, res) => {
 
         if (!transaction) {
             return res.status(404).json({ message: 'Transaction not found' });
-        }
-
-        for (const item of transaction.borrowedItems) {
-            const equipment = item.eqID;
-            if (equipment) {
-                equipment.stock += item.quantity;
-                await equipment.save();
-            }
         }
 
         const updateData = {
