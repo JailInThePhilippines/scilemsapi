@@ -20,24 +20,17 @@ class AuthController {
         return { accessToken, refreshToken };
     }
 
-    static async login(req, res) {
+    static async login(req, res, username, password) {
         try {
-            const errors = validationResult(req);
-            if (!errors.isEmpty()) {
-                return res.status(400).json({ errors: errors.array() });
-            }
-
-            const { username, password } = req.body;
-
             const user = await req.userModel.findOne({ username }).select('+password');
 
             if (!user) {
-                return res.status(400).json({ message: 'Invalid credentials' });
+                return { message: 'Invalid credentials' };
             }
 
             const isMatch = await bcrypt.compare(password, user.password);
             if (!isMatch) {
-                return res.status(400).json({ message: 'Invalid credentials' });
+                return { message: 'Invalid credentials' };
             }
 
             await req.userModel.updateOne(
@@ -72,15 +65,17 @@ class AuthController {
                 maxAge: 7 * 24 * 60 * 60 * 1000
             });
 
-            res.json({
+            // Instead of res.json, return the result:
+            return {
                 message: 'Login successful',
                 accessToken,
                 user: userData
-            });
+            };
 
         } catch (error) {
             console.error(error);
-            res.status(500).json({ message: 'Server Error' });
+            // Instead of res.status, throw error to be handled by caller
+            throw error;
         }
     }
 

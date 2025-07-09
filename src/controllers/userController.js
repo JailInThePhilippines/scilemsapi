@@ -5,6 +5,7 @@ const Equipment = require('../models/equipmentModel');
 const { validationResult } = require('express-validator');
 const generatePassword = require('../utils/passwordGenerator');
 const { sendAccountCreationEmail } = require('../utils/emailConfig');
+const { encrypt, decrypt } = require('../utils/aesUtil');
 
 exports.createUserByAdmin = async (req, res) => {
     try {
@@ -67,8 +68,33 @@ exports.createUserByAdmin = async (req, res) => {
 };
 
 exports.loginUser = async (req, res) => {
-    req.userModel = User;
-    return AuthController.login(req, res);
+    try {
+        // Decrypt incoming payload
+        const { encrypted } = req.body;
+        const decryptedPayload = JSON.parse(decrypt(encrypted));
+        console.log('Decrypted login payload:', decryptedPayload);
+        const { username, password } = decryptedPayload;
+
+        req.userModel = User;
+        const loginResponse = await AuthController.login(req, res, username, password);
+
+        // Handle invalid credentials
+        if (!loginResponse || !loginResponse.user || !loginResponse.accessToken) {
+            return res.status(400).json({ message: loginResponse?.message || 'Invalid credentials' });
+        }
+
+        // After generating JWT and user object:
+        const { user, accessToken } = loginResponse;
+        const responsePayload = {
+            user,
+            accessToken,
+        };
+        const encryptedResponse = encrypt(JSON.stringify(responsePayload));
+        res.json({ encrypted: encryptedResponse });
+    } catch (err) {
+        console.error('Error during login:', err);
+        res.status(500).json({ message: 'Server Error' });
+    }
 };
 
 exports.refreshToken = async (req, res) => {
