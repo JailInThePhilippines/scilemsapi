@@ -19,7 +19,18 @@ app.use(cors({
     credentials: true
 }));
 
-app.use(express.json());
+// Only use express.json() for non-encrypted routes
+app.use((req, res, next) => {
+    if (
+        (req.path === '/api/admin/auth/login' || req.path === '/api/users/auth/login') &&
+        req.method === 'POST'
+    ) {
+        // Don't use express.json() for encrypted login
+        return next();
+    }
+    express.json()(req, res, next);
+});
+
 app.use(cookieParser());
 
 app.use('/api/admin', adminRoutes);

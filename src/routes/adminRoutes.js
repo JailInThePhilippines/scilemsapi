@@ -31,6 +31,7 @@ const AuthController = require('../controllers/authController');
 const validationRules = require('../utils/validation');
 const authMiddleware = require('../middlewares/authMiddleware');
 const Admin = require('../models/adminModel');
+const decryptBodyMiddleware = require('../utils/decryptBodyMiddleware');
 
 router.get('/me', authMiddleware, getAdminDetails);
 router.get('/borrowed-items', authMiddleware, getAllBorrowedItemsDetailsForAdmin);
@@ -46,7 +47,8 @@ router.get('/equipment/category/counts', authMiddleware, getEquipmentCountPerCat
 router.get('/monthly/borrower/counts', authMiddleware, getMonthlyBorrowerCounts);
 
 router.post('/auth/register', validationRules.admin, createAdmin);
-router.post('/auth/login', validationRules.login, loginAdmin);
+// Accept encrypted login payload
+router.post('/auth/login', decryptBodyMiddleware, validationRules.login, loginAdmin);
 router.post('/refresh-token', refreshToken);
 router.post('/logout', authMiddleware, logout);
 

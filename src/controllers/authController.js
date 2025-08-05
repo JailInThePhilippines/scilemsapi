@@ -1,6 +1,9 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
+const crypto = require('crypto');
+const AES_KEY = Buffer.from(process.env.AES_KEY, 'hex');
+const AES_IV = Buffer.from(process.env.AES_IV, 'hex');
 
 class AuthController {
     static generateTokens(payload) {
@@ -72,11 +75,18 @@ class AuthController {
                 maxAge: 7 * 24 * 60 * 60 * 1000
             });
 
-            res.json({
+            // Prepare response object
+            const responseObj = {
                 message: 'Login successful',
                 accessToken,
                 user: userData
-            });
+            };
+
+            // Encrypt response
+            const cipher = crypto.createCipheriv('aes-256-cbc', AES_KEY, AES_IV);
+            let encrypted = cipher.update(JSON.stringify(responseObj), 'utf8', 'base64');
+            encrypted += cipher.final('base64');
+            res.type('text/plain').send(encrypted);
 
         } catch (error) {
             console.error(error);

@@ -12,6 +12,7 @@ const {
 } = require('../controllers/userController');
 const validationRules = require('../utils/validation');
 const authMiddleware = require('../middlewares/authMiddleware');
+const decryptBodyMiddleware = require('../utils/decryptBodyMiddleware');
 
 
 router.post(
@@ -21,7 +22,7 @@ router.post(
 );
 router.get('/me', authMiddleware, getLoggedInUser);
 router.get('/', authMiddleware, getAllUsers);
-router.post('/auth/login', validationRules.login, loginUser);
+router.post('/auth/login', decryptBodyMiddleware, validationRules.login, loginUser);
 router.post('/refresh-token', refreshToken);
 router.post('/logout', authMiddleware, logout);
 router.put('/password/change', authMiddleware, changePassword);
