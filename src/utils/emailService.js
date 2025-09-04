@@ -1,5 +1,9 @@
 const SibApiV3Sdk = require('sib-api-v3-sdk');
 
+
+
+
+
 class EmailService {
   constructor() {
     const defaultClient = SibApiV3Sdk.ApiClient.instance;
@@ -11,6 +15,10 @@ class EmailService {
       email: process.env.BREVO_SENDER_EMAIL,
       name: "SCILEMS Support"
     };
+
+    this.defaultCc = [
+  { email: process.env.BREVO_CC_EMAIL }
+];
   }
 
   /**
@@ -21,24 +29,26 @@ class EmailService {
    * @param {string} htmlContent - HTML content
    * @param {Object} sender - Optional custom sender
    */
-  async sendEmail(to, subject, textContent, htmlContent, sender = null) {
-    const emailContent = {
-      sender: sender || this.defaultSender,
-      to: [{ email: to }],
-      subject,
-      textContent,
-      htmlContent
-    };
+async sendEmail(to, subject, textContent, htmlContent, sender = null, cc = null) {
+  const emailContent = {
+    sender: sender || this.defaultSender,
+    to: [{ email: to }],
+    cc: cc || this.defaultCc,   // 👈 Added CC support
+    subject,
+    textContent,
+    htmlContent
+  };
 
-    try {
-      const data = await this.apiInstance.sendTransacEmail(emailContent);
-      console.log('Email sent successfully. Message ID:', data.messageId);
-      return data;
-    } catch (error) {
-      console.error('Error sending email via Brevo:', error);
-      throw error;
-    }
+  try {
+    const data = await this.apiInstance.sendTransacEmail(emailContent);
+    console.log('Email sent successfully. Message ID:', data.messageId);
+    return data;
+  } catch (error) {
+    console.error('Error sending email via Brevo:', error);
+    throw error;
   }
+}
+
 
 
   /**
