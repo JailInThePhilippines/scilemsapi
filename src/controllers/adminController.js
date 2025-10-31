@@ -196,7 +196,6 @@ exports.confirmApplication = async (req, res) => {
     try {
         console.log('Starting confirmApplication with transaction ID:', req.params.transactionId);
         const { transactionId } = req.params;
-        const { pickUpDate } = req.body;
 
         console.log('Finding transaction...');
         const transaction = await Transaction.findById(transactionId).populate({
@@ -261,11 +260,11 @@ exports.confirmApplication = async (req, res) => {
 
         console.log('All items processed successfully');
 
+        // Do NOT overwrite pickUpDate here. The borrower sets their desired pickUpDate.
         const updateData = {
             $set: {
                 currentStatus: 'approved',
-                dateApproved: new Date(),
-                pickUpDate: pickUpDate ? new Date(pickUpDate) : null
+                dateApproved: new Date()
             }
         };
 
@@ -305,12 +304,13 @@ exports.confirmApplication = async (req, res) => {
             const userName = user.name || user.username || 'User';
 
             if (userEmail) {
+                // Use the stored pickUpDate from the transaction (if any)
                 await emailService.sendBorrowRequestApprovedEmail(
                     userEmail,
                     userName,
                     updatedTransaction._id,
                     updatedTransaction.borrowedItems,
-                    pickUpDate
+                    updatedTransaction.pickUpDate
                 );
                 console.log('Email notification sent successfully');
             } else {

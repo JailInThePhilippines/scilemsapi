@@ -147,6 +147,7 @@ exports.editQuantity = async (req, res) => {
 exports.borrowItems = async (req, res) => {
     try {
         const userId = req.user.id;
+        const { pickUpDate } = req.body;
 
         const cart = await Cart.findOne({ brID: userId });
 
@@ -160,11 +161,26 @@ exports.borrowItems = async (req, res) => {
             dateOrdered: item.dateOrdered
         }));
 
+        // Validate pickUpDate if provided
+        if (pickUpDate) {
+            const picked = new Date(pickUpDate);
+            const now = new Date();
+            // normalize time for comparison: allow same-day pick up if desired
+            if (isNaN(picked.getTime())) {
+                return res.status(400).json({ message: 'Invalid pickUpDate' });
+            }
+            // optional: ensure pickUpDate is not in the past
+            if (picked < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
+                return res.status(400).json({ message: 'pickUpDate cannot be in the past' });
+            }
+        }
+
         const transaction = new Transaction({
             cartID: cart._id,
             borrowedItems: borrowedItemsSnapshot,
             currentStatus: 'applying',
-            dataApplied: new Date()
+            dataApplied: new Date(),
+            pickUpDate: pickUpDate ? new Date(pickUpDate) : undefined
         });
 
         await transaction.save();
@@ -187,7 +203,7 @@ exports.getBorrowedItemsDetails = async (req, res) => {
         const userId = req.user.id;
 
         const transactions = await Transaction.find()
-            .select('borrowedItems currentStatus dataApplied createdAt updatedAt cartID remarks dateApproved dateBorrowed dateReturned remarks returnDate')
+            .select('borrowedItems currentStatus dataApplied createdAt updatedAt cartID remarks dateApproved dateBorrowed dateReturned returnDate pickUpDate')
             .populate({
                 path: 'cartID',
                 select: 'brID',
@@ -230,16 +246,78 @@ exports.getBorrowedItemsDetails = async (req, res) => {
 exports.cancelApplication = async (req, res) => {
     try {
         const transactionId = req.params.id;
+        const transaction = await Transaction.findById(transactionId).populate({
+            path: 'cartID',
+            populate: { path: 'brID', model: 'User' }
+        });
 
-        const deleted = await Transaction.findByIdAndDelete(transactionId);
-
-        if (!deleted) {
+        if (!transaction) {
             return res.status(404).json({ message: 'Transaction not found' });
         }
+
+        // Do not allow cancelling if already declined
+        if (transaction.currentStatus === 'declined') {
+            return res.status(400).json({ message: 'Cannot cancel a declined transaction' });
+        }
+
+        await Transaction.findByIdAndDelete(transactionId);
 
         res.status(200).json({ message: 'Transaction cancelled successfully' });
     } catch (error) {
         console.error('Cancel error:', error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
+// Reset transaction: move items back to user's cart and delete transaction
+exports.resetTransaction = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const transactionId = req.params.id;
+
+        const transaction = await Transaction.findById(transactionId).populate({
+            path: 'cartID',
+            populate: { path: 'brID', model: 'User' }
+        });
+
+        if (!transaction) return res.status(404).json({ message: 'Transaction not found' });
+
+        const ownerId = transaction.cartID?.brID?._id?.toString();
+        if (!ownerId || ownerId !== userId) {
+            return res.status(403).json({ message: 'Not authorized to reset this transaction' });
+        }
+
+        // Do not allow resetting if declined
+        if (transaction.currentStatus === 'declined') {
+            return res.status(400).json({ message: 'Cannot reset a declined transaction' });
+        }
+
+        // Find or create user's cart
+        let cart = await Cart.findOne({ brID: userId });
+        if (!cart) {
+            cart = new Cart({ brID: userId, items: [] });
+        }
+
+        // Merge items back into cart
+        for (const item of transaction.borrowedItems) {
+            const eqId = item.eqID._id ? item.eqID._id : item.eqID;
+            const existing = cart.items.find(i => i.eqID.toString() === eqId.toString());
+            if (existing) {
+                existing.quantity += item.quantity;
+                existing.dateOrdered = new Date();
+            } else {
+                cart.items.push({ eqID: eqId, quantity: item.quantity, dateOrdered: new Date() });
+            }
+        }
+
+        await cart.save();
+
+        // Delete the transaction
+        await Transaction.findByIdAndDelete(transactionId);
+
+        res.status(200).json({ message: 'Transaction reset: items moved back to cart', cart });
+    } catch (error) {
+        console.error('Error resetting transaction:', error);
         res.status(500).json({ message: 'Server Error' });
     }
 };
@@ -270,6 +348,57 @@ exports.getMyTransactions = async (req, res) => {
         res.status(200).json({ transactions: myTransactions });
     } catch (error) {
         console.error('Error fetching user transactions:', error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
+exports.updatePickUpDate = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const transactionId = req.params.id;
+        const { pickUpDate } = req.body;
+
+        if (!pickUpDate) {
+            return res.status(400).json({ message: 'pickUpDate is required' });
+        }
+
+        const picked = new Date(pickUpDate);
+        if (isNaN(picked.getTime())) {
+            return res.status(400).json({ message: 'Invalid pickUpDate' });
+        }
+
+        const now = new Date();
+        if (picked < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
+            return res.status(400).json({ message: 'pickUpDate cannot be in the past' });
+        }
+
+        const transaction = await Transaction.findById(transactionId).populate({
+            path: 'cartID',
+            populate: {
+                path: 'brID',
+                model: 'User'
+            }
+        });
+
+        if (!transaction) return res.status(404).json({ message: 'Transaction not found' });
+
+        const ownerId = transaction.cartID?.brID?._id?.toString();
+        if (!ownerId || ownerId !== userId) {
+            return res.status(403).json({ message: 'Not authorized to edit this transaction' });
+        }
+
+        // Allow edits only when transaction is still applying or approved (before borrowed)
+        const allowedStatuses = ['applying', 'approved'];
+        if (!allowedStatuses.includes(transaction.currentStatus)) {
+            return res.status(400).json({ message: `Cannot edit pickUpDate when status is '${transaction.currentStatus}'` });
+        }
+
+        transaction.pickUpDate = picked;
+        await transaction.save();
+
+        res.status(200).json({ message: 'pickUpDate updated', transaction });
+    } catch (error) {
+        console.error('Error updating pickUpDate:', error);
         res.status(500).json({ message: 'Server Error' });
     }
 };
