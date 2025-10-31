@@ -598,7 +598,7 @@ exports.getAllBorrowedTransactions = async (req, res) => {
 exports.confirmReturn = async (req, res) => {
     try {
         const { transactionId } = req.params;
-        const { dateReturned, remarks } = req.body;
+        const { dateReturned, remarks, returnedItems } = req.body;
 
         if (!dateReturned || !remarks) {
             return res.status(400).json({ message: 'Date returned and remarks are required.' });
@@ -618,11 +618,34 @@ exports.confirmReturn = async (req, res) => {
             return res.status(404).json({ message: 'Transaction not found' });
         }
 
-        for (const item of transaction.borrowedItems) {
-            const equipment = item.eqID;
-            if (equipment) {
-                equipment.stock += item.quantity;
+        // If returnedItems provided, use those quantities to restock; otherwise default to original quantities
+        // returnedItems is expected to be an array of { eqID: <id>, returnedQuantity: <number> }
+        if (returnedItems && Array.isArray(returnedItems) && returnedItems.length > 0) {
+            for (const item of transaction.borrowedItems) {
+                const equipment = item.eqID;
+                if (!equipment) continue;
+                const eqIdStr = equipment._id ? String(equipment._id) : String(equipment);
+                const matched = returnedItems.find(ri => String(ri.eqID) === eqIdStr);
+                let toRestore = item.quantity;
+                if (matched && typeof matched.returnedQuantity !== 'undefined') {
+                    const parsed = Number(matched.returnedQuantity);
+                    // ensure returned quantity is between 0 and originally borrowed
+                    if (isNaN(parsed) || parsed < 0) {
+                        return res.status(400).json({ message: `Invalid returned quantity for equipment ${eqIdStr}` });
+                    }
+                    toRestore = Math.min(parsed, item.quantity);
+                }
+                equipment.stock += toRestore;
                 await equipment.save();
+            }
+        } else {
+            // default behavior: restore full quantities
+            for (const item of transaction.borrowedItems) {
+                const equipment = item.eqID;
+                if (equipment) {
+                    equipment.stock += item.quantity;
+                    await equipment.save();
+                }
             }
         }
 
