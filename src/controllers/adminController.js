@@ -618,7 +618,8 @@ exports.confirmReturn = async (req, res) => {
             return res.status(404).json({ message: 'Transaction not found' });
         }
 
-        // If returnedItems provided, use those quantities to restock; otherwise default to original quantities
+        // If returnedItems provided, use those quantities to restock and record returnedQuantity on the transaction;
+        // otherwise default to original quantities (full return).
         // returnedItems is expected to be an array of { eqID: <id>, returnedQuantity: <number> }
         if (returnedItems && Array.isArray(returnedItems) && returnedItems.length > 0) {
             for (const item of transaction.borrowedItems) {
@@ -634,43 +635,49 @@ exports.confirmReturn = async (req, res) => {
                         return res.status(400).json({ message: `Invalid returned quantity for equipment ${eqIdStr}` });
                     }
                     toRestore = Math.min(parsed, item.quantity);
+                    // store the actual returned quantity on the transaction item
+                    item.returnedQuantity = toRestore;
+                } else {
+                    // no matched returned quantity, assume full return
+                    item.returnedQuantity = item.quantity;
                 }
+
                 equipment.stock += toRestore;
                 await equipment.save();
             }
         } else {
-            // default behavior: restore full quantities
+            // default behavior: restore full quantities and mark returnedQuantity = quantity
             for (const item of transaction.borrowedItems) {
                 const equipment = item.eqID;
                 if (equipment) {
                     equipment.stock += item.quantity;
+                    item.returnedQuantity = item.quantity;
                     await equipment.save();
                 }
             }
         }
 
-        const updateData = {
-            $set: {
-                lastStatus: transaction.currentStatus,
-                currentStatus: 'returned',
-                dateReturned: new Date(dateReturned),
-                remarks: remarks
-            }
-        };
+        // Update transaction's status and persist the returned quantities
+        transaction.lastStatus = transaction.currentStatus;
+        transaction.currentStatus = 'returned';
+        transaction.dateReturned = new Date(dateReturned);
+        transaction.remarks = remarks;
 
-        await transactionLogger.logStatusChange(transaction, updateData, 'returned');
+        // Persist transaction (which now includes returnedQuantity fields)
+        await transaction.save();
 
-        const updatedTransaction = await Transaction.findByIdAndUpdate(
-            transactionId,
-            updateData,
-            { new: true }
-        ).populate({
+        const updatedTransaction = await Transaction.findById(transactionId).populate({
             path: 'cartID',
             populate: {
                 path: 'brID',
                 model: 'User'
             }
+        }).populate({
+            path: 'borrowedItems.eqID'
         });
+
+        // Log status change after persisting
+        await transactionLogger.logStatusChange(updatedTransaction, { $set: { lastStatus: transaction.lastStatus, currentStatus: transaction.currentStatus } }, 'returned');
 
         const userId = updatedTransaction.cartID.brID;
 

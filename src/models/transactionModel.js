@@ -5,7 +5,9 @@ const TransactionSchema = new mongoose.Schema({
   borrowedItems: [{
     eqID: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipment', required: true },
     quantity: { type: Number, required: true },
-    dateOrdered: { type: Date }
+    dateOrdered: { type: Date },
+    // number of items actually returned for this borrowed item
+    returnedQuantity: { type: Number, default: 0 }
   }],
   currentStatus: {
     type: String,
