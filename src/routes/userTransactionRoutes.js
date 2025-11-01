@@ -1,16 +1,19 @@
 const express = require('express');
 const router = express.Router();
+console.log('Loading userTransactionRoutes');
 const {
   addToCart,
   getCart,
   deleteItemInCart,
   editQuantity,
   borrowItems,
+  createLabRequest,
   getBorrowedItemsDetails,
   updatePickUpDate,
   resetTransaction,
   cancelApplication,
-  getMyTransactions
+  getMyTransactions,
+  getLabRequests
 } = require('../controllers/userTransactionController');
 const validationRules = require('../utils/validation');
 const authMiddleware = require('../middlewares/authMiddleware');
@@ -20,6 +23,10 @@ router.get('/items/borrowed', authMiddleware, getBorrowedItemsDetails);
 router.get('/', authMiddleware, getMyTransactions);
 
 router.post('/cart/add', authMiddleware, addToCart);
+// Create a lab reservation/request
+router.post('/lab/request', authMiddleware, createLabRequest);
+// borrower: get approved schedules and own requests
+router.get('/lab/requests', authMiddleware, getLabRequests);
 router.post('/borrow', authMiddleware, borrowItems);
 
 // Update pick up date (by borrower)

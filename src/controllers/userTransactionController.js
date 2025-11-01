@@ -3,6 +3,7 @@ const AuthController = require('./authController');
 const Cart = require('../models/cartModel');
 const Equipment = require('../models/equipmentModel');
 const Transaction = require('../models/transactionModel');
+const LabRequest = require('../models/labRequestModel');
 const { validationResult } = require('express-validator');
 
 exports.addToCart = async (req, res) => {
@@ -194,6 +195,60 @@ exports.borrowItems = async (req, res) => {
         });
     } catch (error) {
         console.error('Error borrowing items:', error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
+// Create a lab reservation/request
+exports.createLabRequest = async (req, res) => {
+    try {
+        console.log('createLabRequest called by user:', req.user?.id || 'unknown');
+        const userId = req.user.id;
+        const { lab, title, description, startDate, endDate } = req.body;
+
+        if (!lab || !title || !startDate || !endDate) {
+            return res.status(400).json({ message: 'Missing required fields' });
+        }
+
+        const s = new Date(startDate);
+        const e = new Date(endDate);
+        if (isNaN(s.getTime()) || isNaN(e.getTime()) || s > e) {
+            return res.status(400).json({ message: 'Invalid start/end date' });
+        }
+
+        const labReq = new LabRequest({
+            brID: userId,
+            lab,
+            title,
+            description,
+            startDate: s,
+            endDate: e,
+            status: 'pending'
+        });
+
+        await labReq.save();
+
+        res.status(201).json({ message: 'Lab request created', labRequest: labReq });
+    } catch (error) {
+        console.error('Error creating lab request:', error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
+// Get lab requests for borrower view: approved schedules and user's own requests
+exports.getLabRequests = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        // all approved schedules (for everyone)
+        const approved = await LabRequest.find({ status: 'approved' }).populate('brID', 'firstname lastname');
+
+        // user's own requests (all statuses)
+        const mine = await LabRequest.find({ brID: userId }).sort({ createdAt: -1 });
+
+        res.status(200).json({ approved, mine });
+    } catch (error) {
+        console.error('Error fetching lab requests:', error);
         res.status(500).json({ message: 'Server Error' });
     }
 };

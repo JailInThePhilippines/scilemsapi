@@ -10,6 +10,7 @@ const notificationService = require('../utils/notificationService');
 const transactionLogger = require('../utils/transactionLogger');
 const Logbook = require('../models/logBookModel');
 const emailService = require('../utils/emailService');
+const LabRequest = require('../models/labRequestModel');
 
 exports.createAdmin = async (req, res) => {
     try {
@@ -1091,6 +1092,100 @@ exports.getMonthlyBorrowerCounts = async (req, res) => {
         res.status(200).json(result);
     } catch (error) {
         console.error(error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
+// Lab request admin endpoints
+exports.getAllLabRequests = async (req, res) => {
+    try {
+        const labRequests = await LabRequest.find()
+            .populate({ path: 'brID', select: 'firstname middlename lastname email' })
+            .populate({ path: 'adminId', select: 'username firstname lastname' })
+            .sort({ createdAt: -1 })
+            .lean();
+
+        res.status(200).json({ labRequests });
+    } catch (err) {
+        console.error('Error fetching lab requests:', err);
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
+exports.approveLabRequest = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { remarks } = req.body;
+
+        const labReq = await LabRequest.findById(id).populate('brID');
+        if (!labReq) return res.status(404).json({ message: 'Lab request not found' });
+
+        labReq.status = 'approved';
+        labReq.remarks = remarks || labReq.remarks;
+        labReq.adminId = req.user._id;
+        labReq.dateApproved = new Date();
+
+        await labReq.save();
+
+        // notify user
+        try {
+            const user = labReq.brID;
+            if (user) {
+                const userId = user._id;
+                const notificationService = require('../utils/notificationService');
+                await notificationService.createUserNotification(userId, {
+                    title: 'Lab Request Approved',
+                    description: `Your request "${labReq.title}" has been approved. Remarks: ${labReq.remarks || ''}`,
+                    resourceType: 'application',
+                    resourceId: labReq._id
+                });
+            }
+        } catch (notifyErr) {
+            console.error('Failed to notify user about lab approval:', notifyErr);
+        }
+
+        res.status(200).json({ message: 'Lab request approved', labRequest: labReq });
+    } catch (err) {
+        console.error('Error approving lab request:', err);
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
+exports.declineLabRequest = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { remarks } = req.body;
+
+        const labReq = await LabRequest.findById(id).populate('brID');
+        if (!labReq) return res.status(404).json({ message: 'Lab request not found' });
+
+        labReq.status = 'declined';
+        labReq.remarks = remarks || labReq.remarks;
+        labReq.adminId = req.user._id;
+        labReq.dateApproved = new Date();
+
+        await labReq.save();
+
+        // notify user
+        try {
+            const user = labReq.brID;
+            if (user) {
+                const userId = user._id;
+                const notificationService = require('../utils/notificationService');
+                await notificationService.createUserNotification(userId, {
+                    title: 'Lab Request Declined',
+                    description: `Your request "${labReq.title}" has been declined. Remarks: ${labReq.remarks || ''}`,
+                    resourceType: 'application',
+                    resourceId: labReq._id
+                });
+            }
+        } catch (notifyErr) {
+            console.error('Failed to notify user about lab decline:', notifyErr);
+        }
+
+        res.status(200).json({ message: 'Lab request declined', labRequest: labReq });
+    } catch (err) {
+        console.error('Error declining lab request:', err);
         res.status(500).json({ message: 'Server Error' });
     }
 };

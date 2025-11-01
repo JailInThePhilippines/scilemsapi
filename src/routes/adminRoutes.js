@@ -27,6 +27,7 @@ const {
     getEquipmentCountPerCategory,
     getMonthlyBorrowerCounts
 } = require('../controllers/adminController')
+const { getAllLabRequests, approveLabRequest, declineLabRequest } = require('../controllers/adminController');
 const AuthController = require('../controllers/authController');
 const validationRules = require('../utils/validation');
 const authMiddleware = require('../middlewares/authMiddleware');
@@ -45,6 +46,11 @@ router.get('/user/counts', authMiddleware, getUsersWithBorrowedOrPendingTransact
 router.get('/equipment/borrowed-and-returned-count', authMiddleware, getEquipmentBorrowedAndReturnedCount);
 router.get('/equipment/category/counts', authMiddleware, getEquipmentCountPerCategory);
 router.get('/monthly/borrower/counts', authMiddleware, getMonthlyBorrowerCounts);
+
+// Lab requests (admin)
+router.get('/lab/requests', authMiddleware, getAllLabRequests);
+router.put('/lab/request/:id/approve', authMiddleware, approveLabRequest);
+router.put('/lab/request/:id/decline', authMiddleware, declineLabRequest);
 
 router.post('/auth/register', validationRules.admin, createAdmin);
 // Accept encrypted login payload
