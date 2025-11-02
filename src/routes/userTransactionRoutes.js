@@ -27,6 +27,8 @@ router.post('/cart/add', authMiddleware, addToCart);
 router.post('/lab/request', authMiddleware, createLabRequest);
 // borrower: get approved schedules and own requests
 router.get('/lab/requests', authMiddleware, getLabRequests);
+// borrower: delete own lab request (allowed when not approved)
+router.delete('/lab/request/:id', authMiddleware, require('../controllers/userTransactionController').deleteLabRequest);
 router.post('/borrow', authMiddleware, borrowItems);
 
 // Update pick up date (by borrower)

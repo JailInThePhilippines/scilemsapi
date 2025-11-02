@@ -253,6 +253,34 @@ exports.getLabRequests = async (req, res) => {
     }
 };
 
+// Delete a lab request owned by the authenticated user (only if not approved)
+exports.deleteLabRequest = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const reqId = req.params.id;
+
+        const labReq = await LabRequest.findById(reqId);
+        if (!labReq) return res.status(404).json({ message: 'Lab request not found' });
+
+        // check ownership
+        if (!labReq.brID || labReq.brID.toString() !== userId.toString()) {
+            return res.status(403).json({ message: 'Not authorized to delete this request' });
+        }
+
+        // disallow deleting approved requests
+        if (labReq.status === 'approved') {
+            return res.status(400).json({ message: 'Cannot delete an approved request' });
+        }
+
+        await LabRequest.findByIdAndDelete(reqId);
+
+        res.status(200).json({ message: 'Lab request deleted' });
+    } catch (error) {
+        console.error('Error deleting lab request:', error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
 exports.getBorrowedItemsDetails = async (req, res) => {
     try {
         const userId = req.user.id;
