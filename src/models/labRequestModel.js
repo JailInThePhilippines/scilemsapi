@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const LabRequestSchema = new mongoose.Schema({
   brID: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  lab: { type: String, enum: ['lab1', 'lab2', 'lab3'], required: true },
+  lab: { type: String, enum: ['Science Laboratory', 'Innovation Hub'], required: true },
   title: { type: String, required: true },
   description: { type: String },
   startDate: { type: Date, required: true },

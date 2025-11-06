@@ -1127,6 +1127,57 @@ exports.approveLabRequest = async (req, res) => {
 
         await labReq.save();
 
+        // After approving, automatically decline other pending lab requests
+        // that are for the same lab and have overlapping times.
+        try {
+            // Find conflicting pending requests: overlap condition is
+            // other.startDate < approved.endDate && other.endDate > approved.startDate
+            const conflicts = await LabRequest.find({
+                _id: { $ne: labReq._id },
+                lab: labReq.lab,
+                status: 'pending',
+                startDate: { $lt: labReq.endDate },
+                endDate: { $gt: labReq.startDate }
+            }).populate('brID');
+
+            if (conflicts && conflicts.length > 0) {
+                const conflictIds = conflicts.map(c => c._id);
+
+                const declineRemark = 'Automatically declined due to conflicting approved lab request';
+
+                await LabRequest.updateMany(
+                    { _id: { $in: conflictIds } },
+                    {
+                        $set: {
+                            status: 'declined',
+                            remarks: declineRemark,
+                            adminId: req.user._id,
+                            dateApproved: new Date()
+                        }
+                    }
+                );
+
+                // Notify users of the declined conflicting requests
+                try {
+                    for (const c of conflicts) {
+                        const userId = c.brID; // may be populated or ObjectId
+                        if (userId) {
+                            await notificationService.createUserNotification(userId, {
+                                title: 'Lab Request Declined',
+                                description: `Your request "${c.title}" for ${c.lab} (${new Date(c.startDate).toLocaleString()} - ${new Date(c.endDate).toLocaleString()}) was automatically declined because another request was approved for the same time.`,
+                                resourceType: 'application',
+                                resourceId: c._id
+                            });
+                        }
+                    }
+                } catch (notifyErr) {
+                    console.error('Failed to notify users about auto-declined lab requests:', notifyErr);
+                }
+            }
+        } catch (confErr) {
+            console.error('Error while auto-declining conflicting lab requests:', confErr);
+        }
+
         // notify user
         try {
             const user = labReq.brID;
