@@ -12,6 +12,19 @@ const Logbook = require('../models/logBookModel');
 const emailService = require('../utils/emailService');
 const LabRequest = require('../models/labRequestModel');
 
+// Helper to format borrowed items into a readable string for notifications
+function formatBorrowedItems(items = []) {
+    try {
+        return items.map(i => {
+            const name = i.eqID && i.eqID.name ? i.eqID.name : (i.eqID || 'Unknown item');
+            const qty = typeof i.quantity !== 'undefined' ? i.quantity : (i.returnedQuantity || 'N/A');
+            return `${name} x${qty}`;
+        }).join(', ');
+    } catch (e) {
+        return '';
+    }
+}
+
 exports.createAdmin = async (req, res) => {
     try {
         const errors = validationResult(req);
@@ -289,15 +302,18 @@ exports.confirmApplication = async (req, res) => {
         const userId = user._id || user;
 
         console.log('Creating in-app notification for user:', userId);
-        await notificationService.createUserNotification(
-            userId,
-            {
+        try {
+            const itemsStr = formatBorrowedItems(updatedTransaction.borrowedItems || []);
+            const pickUpText = updatedTransaction.pickUpDate ? ` Pick-up date: ${new Date(updatedTransaction.pickUpDate).toLocaleString()}.` : '';
+            await notificationService.createUserNotification(userId, {
                 title: 'Borrow Request Approved',
-                description: `Your borrow request for equipment has been approved.`,
+                description: `Your borrow request for ${itemsStr} has been approved.${pickUpText} Please check your transactions for details.`,
                 resourceType: 'transaction',
                 resourceId: updatedTransaction._id
-            }
-        );
+            });
+        } catch (notifyErr) {
+            console.error('Failed to create in-app notification for approved borrow request:', notifyErr);
+        }
 
         try {
             console.log('Sending email notification...');
@@ -374,15 +390,17 @@ exports.declineApplication = async (req, res) => {
         const user = transaction.cartID.brID;
         const userId = user._id || user;
 
-        await notificationService.createUserNotification(
-            userId,
-            {
+        try {
+            const itemsStr = formatBorrowedItems(transaction.borrowedItems || []);
+            await notificationService.createUserNotification(userId, {
                 title: 'Borrow Request Declined',
-                description: `Your borrow request has been declined. Remarks: ${finalRemarks}`,
+                description: `Your borrow request for ${itemsStr} has been declined. Remarks: ${finalRemarks}`,
                 resourceType: 'transaction',
                 resourceId: transaction._id
-            }
-        );
+            });
+        } catch (notifyErr) {
+            console.error('Failed to create in-app notification for declined borrow request:', notifyErr);
+        }
 
         try {
             console.log('Sending decline email notification...');
@@ -463,15 +481,17 @@ exports.confirmBorrowedStatus = async (req, res) => {
         const user = updatedTransaction.cartID.brID;
         const userId = user._id || user;
 
-        await notificationService.createUserNotification(
-            userId,
-            {
+        try {
+            const itemsStr = formatBorrowedItems(updatedTransaction.borrowedItems || []);
+            await notificationService.createUserNotification(userId, {
                 title: 'Items Borrowed',
-                description: `You have successfully borrowed the items. Please return them by ${new Date(returnDate).toLocaleDateString()}.`,
+                description: `You have successfully borrowed: ${itemsStr}. Please return them by ${new Date(returnDate).toLocaleDateString()}.`,
                 resourceType: 'transaction',
                 resourceId: updatedTransaction._id
-            }
-        );
+            });
+        } catch (notifyErr) {
+            console.error('Failed to create in-app notification for borrowed items:', notifyErr);
+        }
 
         try {
             console.log('Sending borrowed items email notification...');
@@ -543,15 +563,17 @@ exports.declineApproval = async (req, res) => {
 
         const userId = transaction.cartID.brID;
 
-        await notificationService.createUserNotification(
-            userId,
-            {
+        try {
+            const itemsStr = formatBorrowedItems(transaction.borrowedItems || []);
+            await notificationService.createUserNotification(userId, {
                 title: 'Approval Declined',
-                description: `Your approval request was declined. Remarks: ${transaction.remarks}`,
+                description: `Your approval request for ${itemsStr} was declined. Remarks: ${transaction.remarks}`,
                 resourceType: 'transaction',
                 resourceId: transaction._id
-            }
-        );
+            });
+        } catch (notifyErr) {
+            console.error('Failed to create in-app notification for approval declined:', notifyErr);
+        }
 
         res.status(200).json({
             message: 'Approval declined and stock restored successfully',
@@ -682,15 +704,23 @@ exports.confirmReturn = async (req, res) => {
 
         const userId = updatedTransaction.cartID.brID;
 
-        await notificationService.createUserNotification(
-            userId,
-            {
+        try {
+            // show returned quantities if available
+            const itemsStr = (updatedTransaction.borrowedItems || []).map(i => {
+                const name = i.eqID && i.eqID.name ? i.eqID.name : (i.eqID || 'Unknown item');
+                const returned = typeof i.returnedQuantity !== 'undefined' ? i.returnedQuantity : i.quantity;
+                return `${name} x${returned}`;
+            }).join(', ');
+
+            await notificationService.createUserNotification(userId, {
                 title: 'Items Returned',
-                description: `Your return has been confirmed. Remarks: ${remarks}`,
+                description: `Your return has been confirmed. Returned items: ${itemsStr}. Remarks: ${remarks}`,
                 resourceType: 'transaction',
                 resourceId: updatedTransaction._id
-            }
-        );
+            });
+        } catch (notifyErr) {
+            console.error('Failed to create in-app notification for returned items:', notifyErr);
+        }
 
         return res.status(200).json({
             message: 'Transaction marked as returned and stock restored successfully.',
@@ -852,15 +882,16 @@ exports.restoreArchivedRecord = async (req, res) => {
 
         const userId = transaction.cartID.brID;
 
-        await notificationService.createUserNotification(
-            userId,
-            {
+        try {
+            await notificationService.createUserNotification(userId, {
                 title: 'Transaction Restored',
-                description: `Your transaction has been restored. ${remarks ? 'Remarks: ' + remarks : ''}`,
+                description: `Your transaction has been restored to status '${transaction.currentStatus}'. ${remarks ? 'Remarks: ' + remarks : ''}`,
                 resourceType: 'transaction',
                 resourceId: transaction._id
-            }
-        );
+            });
+        } catch (notifyErr) {
+            console.error('Failed to create in-app notification for restored transaction:', notifyErr);
+        }
 
         res.status(200).json({
             message: 'Transaction successfully restored.',
