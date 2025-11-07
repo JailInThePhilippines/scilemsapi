@@ -4,7 +4,8 @@ const Cart = require('../models/cartModel');
 const Equipment = require('../models/equipmentModel');
 const { validationResult } = require('express-validator');
 const generatePassword = require('../utils/passwordGenerator');
-const { sendAccountCreationEmail } = require('../utils/emailConfig');
+// Use the central email service which other notifications use successfully
+const emailService = require('../utils/emailService');
 
 exports.createUserByAdmin = async (req, res) => {
     try {
@@ -44,22 +45,61 @@ exports.createUserByAdmin = async (req, res) => {
 
         const user = await AuthController.register(User, userData);
 
-        try {
-            await sendAccountCreationEmail(user.email, user.username, generatedPassword);
-        } catch (emailError) {
-            console.error('Failed to send email:', emailError);
-            return res.status(201).json({
-                message: 'User created successfully but there was an issue sending the email notification',
-                user,
-                emailStatus: 'failed'
-            });
-        }
+                // Build account creation email using the shared email service
+                const subject = 'Welcome to SCILEMS - Your Account Information';
+                const textContent = `\nWelcome to SCILEMS!\n\nYour account has been created by an administrator.\n\nUsername: ${user.username}\nTemporary Password: ${generatedPassword}\n\nPlease log in using these credentials and change your password immediately for security purposes.\n\nThank you for using SCILEMS!\n`;
+                const htmlContent = `
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px; background-color: #ffffff;">
+                        <div style="text-align: center; margin-bottom: 20px;">
+                            <h2 style="color: #2c3e50; margin: 0;">Welcome to <span style="color: #3498db;">SCILEMS</span>!</h2>
+                        </div>
 
-        res.status(201).json({
-            message: 'User created successfully and credentials sent to their email',
-            user,
-            emailStatus: 'sent'
-        });
+                        <p style="color: #333; font-size: 15px; line-height: 1.5;">
+                            Your account has been created by an administrator. Below are your login credentials:
+                        </p>
+
+                        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 6px; margin: 20px 0; border: 1px solid #e0e0e0;">
+                            <p style="margin: 0; font-size: 15px;"><strong>Username:</strong> ${user.username}</p>
+                            <p style="margin: 5px 0 0; font-size: 15px;"><strong>Temporary Password:</strong> ${generatedPassword}</p>
+                        </div>
+
+                        <p style="color: #333; font-size: 15px; line-height: 1.5;">
+                            Please log in using these credentials and <strong>change your password immediately</strong> for security purposes.
+                        </p>
+
+                        <div style="text-align: center; margin: 25px 0;">
+                            <a href="https://scilems.pages.dev/home" 
+                                style="display: inline-block; padding: 12px 25px; background-color: #3498db; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 15px;">
+                                Go to SCILEMS
+                            </a>
+                        </div>
+
+                        <p style="color: #333; font-size: 15px; line-height: 1.5;">
+                            If you have any questions, please contact our support team.
+                        </p>
+
+                        <div style="text-align: center; margin-top: 25px; font-size: 12px; color: #777;">
+                            <p>This is an automated message, please do not reply to this email.</p>
+                        </div>
+                    </div>
+                `;
+
+                try {
+                        await emailService.sendEmail(user.email, subject, textContent, htmlContent);
+                } catch (emailError) {
+                        console.error('Failed to send account creation email via shared service:', emailError);
+                        return res.status(201).json({
+                                message: 'User created successfully but there was an issue sending the email notification',
+                                user,
+                                emailStatus: 'failed'
+                        });
+                }
+
+                res.status(201).json({
+                        message: 'User created successfully and credentials sent to their email',
+                        user,
+                        emailStatus: 'sent'
+                });
     } catch (error) {
         console.error('Error creating user by admin:', error);
         res.status(500).json({ message: 'Server Error' });
