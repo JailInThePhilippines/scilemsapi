@@ -1,5 +1,6 @@
 const Equipment = require('../models/equipmentModel');
 const Category = require('../models/categoryModel');
+const Lab = require('../models/labModel');
 const { validationResult } = require('express-validator');
 const { uploadToCloudinary } = require('../middlewares/uploadMiddleware');
 const notificationService = require('../utils/notificationService');
@@ -313,5 +314,94 @@ exports.initializeDefaultCategory = async () => {
         console.log('Default "No Category" initialized successfully');
     } catch (error) {
         console.error('Error initializing default category:', error);
+    }
+};
+
+const ensureNoLabExists = async () => {
+    let noLab = await Lab.findOne({ name: 'No Lab' });
+    if (!noLab) {
+        noLab = new Lab({ name: 'No Lab' });
+        await noLab.save();
+    }
+    return noLab;
+};
+
+// Lab CRUD
+exports.addLab = async (req, res) => {
+    try {
+        const { name } = req.body;
+        if (!name || typeof name !== 'string' || !name.trim()) {
+            return res.status(400).json({ error: 'Invalid lab name' });
+        }
+
+        const existing = await Lab.findOne({ name: name.trim() });
+        if (existing) return res.status(400).json({ error: 'Lab already exists' });
+
+        const lab = new Lab({ name: name.trim() });
+        await lab.save();
+
+        return res.status(201).json({ message: 'Lab created', lab });
+    } catch (err) {
+        console.error('Error creating lab:', err);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+exports.editLab = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name } = req.body;
+        if (!name || typeof name !== 'string' || !name.trim()) {
+            return res.status(400).json({ error: 'Invalid lab name' });
+        }
+
+        const lab = await Lab.findById(id);
+        if (!lab) return res.status(404).json({ error: 'Lab not found' });
+        if (lab.name === 'No Lab') return res.status(400).json({ error: 'Cannot edit default lab' });
+
+        const existing = await Lab.findOne({ name: name.trim() });
+        if (existing && existing._id.toString() !== id) {
+            return res.status(400).json({ error: 'Another lab with this name already exists' });
+        }
+
+        lab.name = name.trim();
+        await lab.save();
+
+        return res.status(200).json({ message: 'Lab updated', lab });
+    } catch (err) {
+        console.error('Error editing lab:', err);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+exports.deleteLab = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const lab = await Lab.findById(id);
+        if (!lab) return res.status(404).json({ error: 'Lab not found' });
+        if (lab.name === 'No Lab') return res.status(400).json({ error: 'Cannot delete default lab' });
+
+        // Reassign any lab requests that reference this lab name to 'No Lab'
+        const noLab = await ensureNoLabExists();
+        const LabRequest = require('../models/labRequestModel');
+        const affected = await LabRequest.updateMany({ lab: lab.name }, { $set: { lab: noLab.name } });
+
+        await Lab.deleteOne({ _id: id });
+
+        return res.status(200).json({ message: 'Lab deleted', movedRequests: affected.nModified || affected.modifiedCount || 0 });
+    } catch (err) {
+        console.error('Error deleting lab:', err);
+        return res.status(500).json({ error: 'Server error' });
+    }
+};
+
+exports.getLabs = async (req, res) => {
+    try {
+        await ensureNoLabExists();
+        const labs = await Lab.find().sort({ name: 1 });
+        return res.status(200).json({ labs });
+    } catch (err) {
+        console.error('Error fetching labs:', err);
+        return res.status(500).json({ error: 'Server error' });
     }
 };

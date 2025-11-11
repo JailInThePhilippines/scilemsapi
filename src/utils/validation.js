@@ -33,6 +33,14 @@ const validationRules = {
             .withMessage('Category name is required')
     ],
 
+    lab: [
+        body('name')
+            .isString()
+            .withMessage('Lab name must be a string')
+            .notEmpty()
+            .withMessage('Lab name is required')
+    ],
+
     equipment: [
         body('catID')
             .isMongoId()

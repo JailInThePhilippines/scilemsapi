@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 
 const LabRequestSchema = new mongoose.Schema({
   brID: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  lab: { type: String, enum: ['Science Laboratory', 'Innovation Hub'], required: true },
+  // Allow any lab name string so admin-managed labs (or existing misspellings) remain valid.
+  lab: { type: String, required: true },
   title: { type: String, required: true },
   description: { type: String },
   startDate: { type: Date, required: true },
