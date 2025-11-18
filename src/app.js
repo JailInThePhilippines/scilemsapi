@@ -7,6 +7,7 @@ const inventoryRoutes = require('./routes/inventoryRoutes');
 const userTransactionRoutes = require('./routes/userTransactionRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const transactionHistoryRoutes = require('./routes/transactionHistoryRoutes');
+const visitorRoutes = require('./routes/visitorRoutes');
 const { scheduleOverdueItemsCheck } = require('./utils/scheduleJobs');
 require('dotenv').config();
 
@@ -39,6 +40,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/user/transactions', userTransactionRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/transactions/history', transactionHistoryRoutes);
+app.use('/api/visitors', visitorRoutes);
 
 app.use((err, req, res, next) => {
     console.error(err.stack);
