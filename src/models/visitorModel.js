@@ -4,6 +4,7 @@ const VisitorSchema = new mongoose.Schema({
   sessionToken: { type: String, required: true, index: true },
   latitude: { type: Number },
   longitude: { type: Number },
+  accuracy: { type: Number },
   ip: { type: String },
   userAgent: { type: String },
   country: { type: String },

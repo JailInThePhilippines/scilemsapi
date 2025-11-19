@@ -9,7 +9,10 @@ function getIp(req) {
 
 exports.createVisitor = async (req, res) => {
   try {
-    const { sessionToken, latitude, longitude, timestamp, country, region, city } = req.body || {};
+    const { sessionToken, latitude: latRaw, longitude: lngRaw, accuracy: accRaw, timestamp, country, region, city } = req.body || {};
+    const latitude = latRaw != null ? parseFloat(latRaw) : undefined;
+    const longitude = lngRaw != null ? parseFloat(lngRaw) : undefined;
+    const accuracy = accRaw != null ? parseFloat(accRaw) : undefined;
     if (!sessionToken) {
       return res.status(400).json({ message: 'sessionToken is required' });
     }
@@ -18,19 +21,21 @@ exports.createVisitor = async (req, res) => {
     const userAgent = req.headers['user-agent'] || '';
 
     // Upsert a visitor record by sessionToken so each browser yields one record
-    const update = {
-      $setOnInsert: {
-        sessionToken,
-        latitude: latitude || undefined,
-        longitude: longitude || undefined,
-        ip,
-        userAgent,
-        country: country || undefined,
-        region: region || undefined,
-        city: city || undefined,
-        timestamp: timestamp ? new Date(timestamp) : new Date()
-      }
+    const setOnInsert = {
+      sessionToken,
+      ip,
+      userAgent,
+      timestamp: timestamp ? new Date(timestamp) : new Date()
     };
+
+    if (Number.isFinite(latitude) && latitude >= -90 && latitude <= 90) setOnInsert.latitude = latitude;
+    if (Number.isFinite(longitude) && longitude >= -180 && longitude <= 180) setOnInsert.longitude = longitude;
+    if (Number.isFinite(accuracy) && accuracy >= 0) setOnInsert.accuracy = accuracy;
+    if (country) setOnInsert.country = country;
+    if (region) setOnInsert.region = region;
+    if (city) setOnInsert.city = city;
+
+    const update = { $setOnInsert: setOnInsert };
 
     const options = { upsert: true, new: true, setDefaultsOnInsert: true };
     const visitor = await Visitor.findOneAndUpdate({ sessionToken }, update, options);
@@ -82,5 +87,23 @@ exports.getByLocation = async (req, res) => {
   } catch (err) {
     console.error('getByLocation error', err);
     res.status(500).json({ message: 'Failed to get visitors by location' });
+  }
+};
+
+exports.getCoords = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 500;
+    const visitors = await Visitor.find({
+      latitude: { $exists: true, $ne: null },
+      longitude: { $exists: true, $ne: null }
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .select('sessionToken latitude longitude accuracy city region country timestamp -_id');
+
+    res.json({ visitors });
+  } catch (err) {
+    console.error('getCoords error', err);
+    res.status(500).json({ message: 'Failed to get visitor coordinates' });
   }
 };

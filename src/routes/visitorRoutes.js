@@ -14,4 +14,7 @@ router.get('/today', visitorController.getTodayCount);
 // Get visitors aggregated by country
 router.get('/by-location', visitorController.getByLocation);
 
+// Get recent visitors with coordinates
+router.get('/coords', visitorController.getCoords);
+
 module.exports = router;
