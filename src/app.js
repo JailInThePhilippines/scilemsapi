@@ -8,6 +8,7 @@ const userTransactionRoutes = require('./routes/userTransactionRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const transactionHistoryRoutes = require('./routes/transactionHistoryRoutes');
 const visitorRoutes = require('./routes/visitorRoutes');
+const pingRoutes = require('./routes/pingRoutes');
 const { scheduleOverdueItemsCheck } = require('./utils/scheduleJobs');
 require('dotenv').config();
 
@@ -41,6 +42,8 @@ app.use('/api/user/transactions', userTransactionRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/transactions/history', transactionHistoryRoutes);
 app.use('/api/visitors', visitorRoutes);
+// Simple protected ping endpoint for uptime pings (use a static token or JWT)
+app.use('/api/ping', pingRoutes);
 
 app.use((err, req, res, next) => {
     console.error(err.stack);
