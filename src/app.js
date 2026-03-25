@@ -13,8 +13,15 @@ const { scheduleOverdueItemsCheck } = require('./utils/scheduleJobs');
 require('dotenv').config();
 
 const app = express();
-scheduleOverdueItemsCheck();
-console.log('Scheduled job for checking overdue items has been set up');
+
+const shouldRunScheduler =
+    process.env.ENABLE_SCHEDULER === 'true' ||
+    (!process.env.VERCEL && process.env.NODE_ENV !== 'test');
+
+if (shouldRunScheduler) {
+    scheduleOverdueItemsCheck();
+    console.log('Scheduled job for checking overdue items has been set up');
+}
 
 app.use(cors({
     origin: ['http://localhost:4200', 'http://localhost:50352', 'https://scilems.pages.dev'],
