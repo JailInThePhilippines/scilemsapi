@@ -7,10 +7,21 @@ const handler = serverless(app);
 let dbReady = false;
 
 module.exports = async (req, res) => {
-    if (!dbReady) {
-        await connectDB();
-        dbReady = true;
-    }
+    // Set timeout to prevent infinite hanging
+    const timeout = setTimeout(() => {
+        res.status(503).json({ error: 'Request timeout' });
+    }, 25000); // Vercel timeout is 26s
 
-    return handler(req, res);
+    try {
+        if (!dbReady) {
+            await connectDB();
+            dbReady = true;
+        }
+        clearTimeout(timeout);
+        return handler(req, res);
+    } catch (error) {
+        clearTimeout(timeout);
+        console.error('Error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 };
