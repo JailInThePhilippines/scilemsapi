@@ -52,6 +52,9 @@ TransactionSchema.pre('save', async function (next) {
 
   // Pad to minimum 2 digits; naturally grows to 3+ (e.g. 100)
   this.displayId = `${prefix}${String(maxSeq + 1).padStart(2, '0')}`;
+  
+  // LOG ADDED FOR DEPLOYMENT VERIFICATION
+  console.log(`[SciLEMS-API] Generated new transaction displayId: ${this.displayId}`);
 
   next();
 });
