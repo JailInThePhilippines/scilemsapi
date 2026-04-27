@@ -37,12 +37,21 @@ TransactionSchema.pre('save', async function (next) {
   const dd = String(refDate.getDate()).padStart(2, '0');
   const prefix = `GH${yy}-${mm}${dd}`;
 
-  // Count how many transactions already have a displayId with this date prefix
-  const count = await Transaction.countDocuments({
-    displayId: { $regex: `^${prefix}` }
-  });
-  const seq = String(count + 1).padStart(2, '0');
-  this.displayId = `${prefix}${seq}`;
+  // Find all displayIds for this day and extract the highest sequence number
+  const existing = await Transaction.find(
+    { displayId: { $regex: `^${prefix}` } },
+    { displayId: 1 }
+  ).lean();
+
+  let maxSeq = 0;
+  for (const doc of existing) {
+    const seqStr = doc.displayId.replace(prefix, '');
+    const seqNum = parseInt(seqStr, 10);
+    if (!isNaN(seqNum) && seqNum > maxSeq) maxSeq = seqNum;
+  }
+
+  // Pad to minimum 2 digits; naturally grows to 3+ (e.g. 100)
+  this.displayId = `${prefix}${String(maxSeq + 1).padStart(2, '0')}`;
 
   next();
 });
