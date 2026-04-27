@@ -112,7 +112,7 @@ const transactionHistoryController = {
   async getAllTransactionHistories(req, res) {
     try {
       const transactions = await Transaction.find()
-        .select('_id cartID currentStatus dataApplied dateApproved pickUpDate returnDate dateReturned remarks createdAt updatedAt')
+        .select('_id cartID currentStatus dataApplied dateApproved pickUpDate returnDate dateReturned remarks createdAt updatedAt displayId')
         .populate({
           path: 'cartID',
           select: '_id brID borrowedItems',

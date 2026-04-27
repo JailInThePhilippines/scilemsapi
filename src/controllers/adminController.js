@@ -25,6 +25,22 @@ function formatBorrowedItems(items = []) {
     }
 }
 
+// Fallback generator for displayId when missing in returned documents
+function computeDisplayIdFromId(origId, dateApplied) {
+    try {
+        const idStr = String(origId || '');
+        const d = dateApplied ? new Date(dateApplied) : new Date();
+        const yy = String(d.getFullYear()).slice(-2);
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const digits = (idStr.match(/\d/g) || []).join('');
+        const seq = digits.slice(-2).padStart(2, '0');
+        return `GH${yy}-${mm}${dd}${seq}`;
+    } catch (e) {
+        return null;
+    }
+}
+
 exports.createAdmin = async (req, res) => {
     try {
         const errors = validationResult(req);
@@ -140,7 +156,7 @@ exports.deleteUser = async (req, res) => {
 exports.getAllBorrowedItemsDetailsForAdmin = async (req, res) => {
     try {
         const transactions = await Transaction.find({ currentStatus: 'applying' })
-            .select('borrowedItems currentStatus dataApplied dateApproved pickUpDate dateBorrowed returnDate dateReturned dateArchived lastStatus remarks createdAt updatedAt cartID')
+            .select('borrowedItems currentStatus dataApplied dateApproved pickUpDate dateBorrowed returnDate dateReturned dateArchived lastStatus remarks createdAt updatedAt cartID displayId')
             .populate({
                 path: 'cartID',
                 select: 'brID',
@@ -163,6 +179,13 @@ exports.getAllBorrowedItemsDetailsForAdmin = async (req, res) => {
                 txn.borrowerName = `${user.firstname} ${user.middlename || ''} ${user.lastname}${user.suffix ? ' ' + user.suffix : ''}`.trim();
             } else {
                 txn.borrowerName = 'Unknown';
+            }
+        }
+
+        // Ensure displayId is present for frontend (fallback for any missing values)
+        for (const txn of transactions) {
+            if (!txn.displayId) {
+                txn.displayId = computeDisplayIdFromId(txn._id, txn.dataApplied || txn.createdAt);
             }
         }
 
@@ -1141,7 +1164,9 @@ exports.getTotalEquipmentCount = async (req, res) => {
 exports.permanentDeleteTransaction = async (req, res) => {
     try {
         const { transactionId } = req.params;
-        const { password } = req.body;
+        const { password, force } = req.body; // `force` allows admins to override archive requirement
+
+        // request params and body are validated below
 
         const deletePassword = process.env.ADMIN_DELETE_PASSWORD;
         if (!deletePassword) {
@@ -1157,8 +1182,8 @@ exports.permanentDeleteTransaction = async (req, res) => {
             return res.status(404).json({ message: 'Transaction not found.' });
         }
 
-        // Only allow deletion from archive status
-        if (transaction.currentStatus !== 'archive') {
+        // Only allow deletion from archive status unless `force` is provided
+        if (!force && transaction.currentStatus !== 'archive') {
             return res.status(400).json({ message: 'Only archived transactions can be permanently deleted.' });
         }
 

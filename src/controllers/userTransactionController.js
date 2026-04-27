@@ -286,7 +286,7 @@ exports.getBorrowedItemsDetails = async (req, res) => {
         const userId = req.user.id;
 
         const transactions = await Transaction.find()
-            .select('borrowedItems currentStatus dataApplied createdAt updatedAt cartID remarks dateApproved dateBorrowed dateReturned returnDate pickUpDate')
+            .select('borrowedItems currentStatus dataApplied createdAt updatedAt cartID remarks dateApproved dateBorrowed dateReturned returnDate pickUpDate displayId')
             .populate({
                 path: 'cartID',
                 select: 'brID',
