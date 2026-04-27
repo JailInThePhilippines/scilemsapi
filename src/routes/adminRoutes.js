@@ -25,7 +25,9 @@ const {
     getUsersWithBorrowedOrPendingTransactions,
     getEquipmentBorrowedAndReturnedCount,
     getEquipmentCountPerCategory,
-    getMonthlyBorrowerCounts
+    getMonthlyBorrowerCounts,
+    getTotalEquipmentCount,
+    permanentDeleteTransaction
 } = require('../controllers/adminController')
 const { getAllLabRequests, approveLabRequest, declineLabRequest } = require('../controllers/adminController');
 const AuthController = require('../controllers/authController');
@@ -46,6 +48,7 @@ router.get('/user/counts', authMiddleware, getUsersWithBorrowedOrPendingTransact
 router.get('/equipment/borrowed-and-returned-count', authMiddleware, getEquipmentBorrowedAndReturnedCount);
 router.get('/equipment/category/counts', authMiddleware, getEquipmentCountPerCategory);
 router.get('/monthly/borrower/counts', authMiddleware, getMonthlyBorrowerCounts);
+router.get('/equipment/total-count', authMiddleware, getTotalEquipmentCount);
 
 // Lab requests (admin)
 router.get('/lab/requests', authMiddleware, getAllLabRequests);
@@ -69,5 +72,6 @@ router.put('/restore/archived/:transactionId', authMiddleware, restoreArchivedRe
 
 
 router.delete('/delete/user/:id', authMiddleware, deleteUser);
+router.post('/delete/transaction/:transactionId', authMiddleware, permanentDeleteTransaction);
 
 module.exports = router;

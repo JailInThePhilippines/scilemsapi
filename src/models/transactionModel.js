@@ -14,6 +14,7 @@ const TransactionSchema = new mongoose.Schema({
     enum: ['applying', 'approved', 'borrowed', 'returned', 'archive', 'declined', 'deleted', 'pending', 'restored'],
     required: true
   },
+  displayId: { type: String, unique: true, sparse: true },
   dataApplied: { type: Date },
   dateApproved: { type: Date },
   pickUpDate: { type: Date },
@@ -24,5 +25,26 @@ const TransactionSchema = new mongoose.Schema({
   lastStatus: { type: String },
   remarks: { type: String }
 }, { timestamps: true });
+
+// Pre-save hook to generate displayId on first save (when applying)
+TransactionSchema.pre('save', async function (next) {
+  if (this.displayId) return next(); // already has a displayId
+
+  const Transaction = this.constructor;
+  const refDate = this.dataApplied || new Date();
+  const yy = String(refDate.getFullYear()).slice(-2);
+  const mm = String(refDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(refDate.getDate()).padStart(2, '0');
+  const prefix = `GH${yy}-${mm}${dd}`;
+
+  // Count how many transactions already have a displayId with this date prefix
+  const count = await Transaction.countDocuments({
+    displayId: { $regex: `^${prefix}` }
+  });
+  const seq = String(count + 1).padStart(2, '0');
+  this.displayId = `${prefix}${seq}`;
+
+  next();
+});
 
 module.exports = mongoose.model('Transaction', TransactionSchema);

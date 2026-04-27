@@ -1127,6 +1127,49 @@ exports.getMonthlyBorrowerCounts = async (req, res) => {
     }
 };
 
+exports.getTotalEquipmentCount = async (req, res) => {
+    try {
+        const count = await Equipment.countDocuments();
+        res.status(200).json({ count });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
+// Permanently delete a transaction from archive (password-protected)
+exports.permanentDeleteTransaction = async (req, res) => {
+    try {
+        const { transactionId } = req.params;
+        const { password } = req.body;
+
+        const deletePassword = process.env.ADMIN_DELETE_PASSWORD;
+        if (!deletePassword) {
+            return res.status(500).json({ message: 'Delete password not configured on server.' });
+        }
+
+        if (!password || password !== deletePassword) {
+            return res.status(403).json({ message: 'Incorrect password.' });
+        }
+
+        const transaction = await Transaction.findById(transactionId);
+        if (!transaction) {
+            return res.status(404).json({ message: 'Transaction not found.' });
+        }
+
+        // Only allow deletion from archive status
+        if (transaction.currentStatus !== 'archive') {
+            return res.status(400).json({ message: 'Only archived transactions can be permanently deleted.' });
+        }
+
+        await Transaction.findByIdAndDelete(transactionId);
+        res.status(200).json({ message: 'Transaction permanently deleted.' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
 // Lab request admin endpoints
 exports.getAllLabRequests = async (req, res) => {
     try {

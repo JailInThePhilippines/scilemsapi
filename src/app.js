@@ -49,6 +49,10 @@ app.use('/api/user/transactions', userTransactionRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/transactions/history', transactionHistoryRoutes);
 app.use('/api/visitors', visitorRoutes);
+// Public health-check endpoint (no auth) — used by frontend to detect cold starts
+app.get('/api/health', (req, res) => {
+    res.json({ ok: true, timestamp: Date.now() });
+});
 // Simple protected ping endpoint for uptime pings (use a static token or JWT)
 app.use('/api/ping', pingRoutes);
 
